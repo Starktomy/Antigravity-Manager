@@ -918,9 +918,14 @@ pub async fn handle_messages(
                 request_for_body.model = m;
             }
             
-            // 使用统一退避策略
-            let strategy = determine_retry_strategy(status_code, &error_text, retried_without_thinking);
-            if apply_retry_strategy(strategy, attempt, status_code, &trace_id).await {
+            // [FIX] 强制重试：因为我们已经清理了 thinking block，所以这是一个新的、可以重试的请求
+            // 不要使用 determine_retry_strategy，因为它会因为 retried_without_thinking=true 而返回 NoRetry
+            if apply_retry_strategy(
+                RetryStrategy::FixedDelay(Duration::from_millis(100)), 
+                attempt, 
+                status_code, 
+                &trace_id
+            ).await {
                 continue;
             }
         }
