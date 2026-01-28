@@ -404,8 +404,24 @@ pub struct DeviceProfiles {
 
 pub fn get_device_profiles(account_id: &str) -> Result<DeviceProfiles, String> {
     let storage_path = crate::modules::device::get_storage_path()?;
-    let current = crate::modules::device::read_profile(&storage_path).ok();
+    let mut current = crate::modules::device::read_profile(&storage_path).ok();
     let account = load_account(account_id)?;
+
+    // [Auto-Repair] If storage.json is missing/invalid, and we are querying the current account,
+    // restore it from the account's bound profile.
+    if current.is_none() {
+        if let Ok(Some(current_id)) = get_current_account_id() {
+             if current_id == account_id {
+                 if let Some(bound) = &account.device_profile {
+                     crate::modules::logger::log_info("storage.json missing for current account, auto-restoring...");
+                     if let Ok(_) = crate::modules::device::write_profile(&storage_path, bound) {
+                         current = Some(bound.clone());
+                     }
+                 }
+             }
+        }
+    }
+
     Ok(DeviceProfiles {
         current_storage: current,
         bound_profile: account.device_profile.clone(),
