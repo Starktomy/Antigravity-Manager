@@ -428,6 +428,14 @@ pub fn bind_device_profile(account_id: &str, mode: &str) -> Result<DeviceProfile
     let _ = device::save_global_original(&profile);
     apply_profile_to_account(&mut account, profile.clone(), Some(mode.to_string()), true)?;
 
+    // [FIX] If binding to current account, update storage.json immediately
+    if let Ok(Some(current_id)) = get_current_account_id() {
+        if current_id == account_id {
+            let path = device::get_storage_path()?;
+            device::write_profile(&path, &profile)?;
+        }
+    }
+
     Ok(profile)
 }
 
@@ -436,6 +444,14 @@ pub fn bind_device_profile_with_profile(account_id: &str, profile: DeviceProfile
     let mut account = load_account(account_id)?;
     let _ = crate::modules::device::save_global_original(&profile);
     apply_profile_to_account(&mut account, profile.clone(), label, true)?;
+
+    // [FIX] If binding to current account, update storage.json immediately
+    if let Ok(Some(current_id)) = get_current_account_id() {
+        if current_id == account_id {
+            let path = crate::modules::device::get_storage_path()?;
+            crate::modules::device::write_profile(&path, &profile)?;
+        }
+    }
 
     Ok(profile)
 }
