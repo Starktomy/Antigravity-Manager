@@ -1669,12 +1669,17 @@ async fn admin_preview_generate_profile() -> Result<impl IntoResponse, (StatusCo
     Ok(Json(profile))
 }
 
+#[derive(Deserialize)]
+struct BindProfileWrapper {
+    profile: crate::models::account::DeviceProfile,
+}
+
 async fn admin_bind_device_profile_with_profile(
     State(_state): State<AppState>,
     Path(account_id): Path<String>,
-    Json(profile): Json<crate::models::account::DeviceProfile>,
+    Json(payload): Json<BindProfileWrapper>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
-    let result = account::bind_device_profile_with_profile(&account_id, profile, None).map_err(|e| {
+    let result = account::bind_device_profile_with_profile(&account_id, payload.profile, None).map_err(|e| {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse { error: e }))
     })?;
     Ok(Json(result))

@@ -20,30 +20,29 @@ fn get_data_dir() -> Result<PathBuf, String> {
     Ok(data_dir)
 }
 
-/// Find storage.json path (prefer custom/portable paths)
+/// Find storage.json path (prefer custom/portable paths).
+/// Returns the most likely path even if file doesn't exist.
 pub fn get_storage_path() -> Result<PathBuf, String> {
-    // 1) --user-data-dir flag
+    // 1) --user-data-dir flag (Active process check)
     if let Some(user_data_dir) = process::get_user_data_dir_from_process() {
         let path = user_data_dir
             .join("User")
             .join("globalStorage")
             .join("storage.json");
-        if path.exists() {
-            return Ok(path);
-        }
+        return Ok(path);
     }
 
     // 2) Portable mode (based on executable data/user-data)
     if let Some(exe_path) = process::get_antigravity_executable_path() {
         if let Some(parent) = exe_path.parent() {
-            let portable = parent
-                .join("data")
-                .join("user-data")
-                .join("User")
-                .join("globalStorage")
-                .join("storage.json");
-            if portable.exists() {
-                return Ok(portable);
+            let portable_dir = parent.join("data").join("user-data");
+            // If the portable directory structure exists, we assume portable mode
+            if portable_dir.exists() {
+                 let path = portable_dir
+                    .join("User")
+                    .join("globalStorage")
+                    .join("storage.json");
+                return Ok(path);
             }
         }
     }
@@ -54,9 +53,7 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
         let home = dirs::home_dir().ok_or("failed_to_get_home_dir")?;
         let path =
             home.join("Library/Application Support/Antigravity/User/globalStorage/storage.json");
-        if path.exists() {
-            return Ok(path);
-        }
+        return Ok(path);
     }
 
     #[cfg(target_os = "windows")]
@@ -64,21 +61,18 @@ pub fn get_storage_path() -> Result<PathBuf, String> {
         let appdata =
             std::env::var("APPDATA").map_err(|_| "failed_to_get_appdata_env".to_string())?;
         let path = PathBuf::from(appdata).join("Antigravity\\User\\globalStorage\\storage.json");
-        if path.exists() {
-            return Ok(path);
-        }
+        return Ok(path);
     }
 
     #[cfg(target_os = "linux")]
     {
         let home = dirs::home_dir().ok_or("failed_to_get_home_dir")?;
         let path = home.join(".config/Antigravity/User/globalStorage/storage.json");
-        if path.exists() {
-            return Ok(path);
-        }
+        return Ok(path);
     }
 
-    Err("storage_json_not_found".to_string())
+    #[allow(unreachable_code)]
+    Err("storage_path_determination_failed".to_string())
 }
 
 /// Get directory of storage.json
@@ -115,6 +109,10 @@ pub fn backup_storage(storage_path: &Path) -> Result<PathBuf, String> {
 /// Read current device profile from storage.json
 #[allow(dead_code)]
 pub fn read_profile(storage_path: &Path) -> Result<DeviceProfile, String> {
+    if !storage_path.exists() {
+        return Err(format!("storage_json_not_found: {:?}", storage_path));
+    }
+
     let content =
         fs::read_to_string(storage_path).map_err(|e| format!("read_failed ({:?}): {}", storage_path, e))?;
     let json: Value =
@@ -146,8 +144,16 @@ pub fn read_profile(storage_path: &Path) -> Result<DeviceProfile, String> {
 
 /// Write device profile to storage.json
 pub fn write_profile(storage_path: &Path, profile: &DeviceProfile) -> Result<(), String> {
+    // [FIX] Auto-create if missing
     if !storage_path.exists() {
-        return Err(format!("storage_json_missing: {:?}", storage_path));
+        if let Some(parent) = storage_path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent).map_err(|e| format!("failed_to_create_storage_dir: {}", e))?;
+            }
+        }
+        // Initialize with empty object
+        fs::write(storage_path, "{}").map_err(|e| format!("failed_to_init_storage_json: {}", e))?;
+        logger::log_info(&format!("storage_json_created_at: {:?}", storage_path));
     }
 
     let content =
