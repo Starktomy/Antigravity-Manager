@@ -13,6 +13,7 @@ use tokio::sync::RwLock;
 use std::sync::atomic::AtomicUsize;
 use futures::TryFutureExt;
 use serde::{Deserialize, Serialize};
+use url::Url;
 use crate::modules::{account, logger, proxy_db, config, token_stats, migration};
 use crate::models::{Account, AppConfig, QuotaData, DeviceProfile};
 
